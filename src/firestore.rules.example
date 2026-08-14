@@ -1,0 +1,20 @@
+rules_version = '2';
+
+function isAllowed() {
+  return request.auth != null && request.auth.token.email in [
+    "senin-mailin@gmail.com",
+    "yonetici1@ornek.com",
+    "yonetici2@ornek.com"
+  ];
+}
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /queues/{docId} {
+      allow read, write: if isAllowed();
+    }
+    match /notes/{docId} {
+      allow read, write: if isAllowed();
+    }
+  }
+}
