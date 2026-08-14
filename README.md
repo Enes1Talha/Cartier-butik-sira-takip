@@ -1,129 +1,40 @@
-# Butik Sira Takip
+# Boutique Queue Tracker
 
-Butikte/magazada bekleyen musteri sirasini canli takip eden, sadece
-yetkili kisilerin girebildigi bir uygulama. Google ile giris yapilir;
-sadece izin verilen e-posta adresleri listeyi gorebilir ve duzenleyebilir.
+A real-time customer queue management system built for a retail boutique. Staff can register waiting customers, track live wait times, hand customers off to an advisor, and see daily performance summaries, all synced instantly across every device in the store.
 
-## Ozellikler
+Originally built as a quick internal prototype, it was well received by store management and is now used daily in production, with a pilot rollout under consideration for a shopping mall location.
 
-- Satis ve CS icin ayri bekleme kuyruklari
-- Kisi sayisi, bekleme suresi, danismana devir, "ayrildi" takibi
-- Vardiya notu (ekip ici ortak not)
-- Gunluk ozet ve panoya kopyalama
-- Google ile giris + e-posta allowlist (sadece belirlenen yoneticiler)
-- Firestore ile gercek zamanli senkronizasyon (herkes ayni listeyi ayni anda gorur)
+## Screenshots
 
-## Kurulum
+![Waiting list](ss1%20.png)
+![Sales and CS queues](ss3.png)
+![With advisor](ss4.png)
+![Shift note and daily summary](ss2.png)
 
-### 1. Firebase projesi olustur
+## Features
 
-1. https://console.firebase.google.com adresine git, "Add project" ile yeni proje olustur.
-2. Sol menuden **Build > Authentication** a gir, "Get started" a bas, **Sign-in method**
-   sekmesinden **Google** saglayicisini ac.
-3. Sol menuden **Build > Firestore Database** a gir, "Create database" ile
-   Firestore'u olustur (production mode secebilirsin, kurallari asagida ayri ekleyecegiz).
-4. **Project settings > General** sekmesine gir, en altta "Your apps" bolumunde
-   **Web (</>)** simgesine tikla, bir web app kaydet. Karsina cikan
-   `firebaseConfig` degerlerini not al.
+Separate live queues for Sales and Customer Service. Real-time wait-time tracking, color-coded by how long a customer has been waiting. One tap to move a customer to "with advisor" or mark them as done or left. Daily summary showing total guests, average wait time, and guests lost before being served. Shared shift notes for handoffs between staff. Each day's data is stored as its own record, so historical data is preserved automatically. Google Sign-In with a server-side allowlist, so only authorized staff can view or edit the queue and the public cannot access it at all.
 
-### 2. Ortam degiskenlerini ayarla
+## Tech stack
 
-```bash
-cp .env.example .env
-```
+Frontend: React and Vite. Auth: Firebase Authentication, using Google Sign-In with a redirect flow for mobile compatibility. Database: Firebase Firestore, using onSnapshot for real-time sync across devices. Hosting: Firebase Hosting.
 
-`.env` dosyasini ac, Firebase Console'dan aldigin degerleri ilgili
-satirlara yapistir (`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, vb).
+Access control is enforced in two layers. src/AuthGate.jsx is a client-side gate that shows a not-authorized screen, but this is UX only. firestore.rules is the actual security enforcement, evaluated server-side, and this is what actually prevents unauthorized reads and writes regardless of what the client does.
 
-### 3. Yetkili kisileri tanimla
+## Setup
 
-Iki dosyayi da guncellemen gerekiyor (biri arayuz icin, biri gercek guvenlik icin):
+Step 1, create a Firebase project. Go to the Firebase Console at console.firebase.google.com and create a new project. Under Build, Authentication, enable the Google sign-in provider. Under Build, Firestore Database, create a Firestore database using Standard edition and Production mode. Under Project settings, General, register a new Web app and copy the firebaseConfig values shown.
 
-**`src/allowedUsers.js`** — arayuzde kim girebilir gosterimi icin:
-```js
-export const ALLOWED_EMAILS = [
-  "senin-google-mailin@gmail.com",
-  "yonetici1@ornek.com",
-];
-```
+Step 2, configure environment variables. Copy .env.example to .env, then fill it in with the values from your firebaseConfig: VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID.
 
-**`firestore.rules`** — asil erisim kontrolu, sunucu tarafinda calisir:
-```
-function isAllowed() {
-  return request.auth != null && request.auth.token.email in [
-    "senin-google-mailin@gmail.com",
-    "yonetici1@ornek.com"
-  ];
-}
-```
+Step 3, set the authorized staff list. This project keeps the real allowlist out of git, see .gitignore, since it contains real email addresses. Two files need to be created locally, based on the tracked examples: src/allowedUsers.js, copied from src/allowedUsers.example.js, and firestore.rules, copied from firestore.rules.example, which is the file that actually gets deployed and enforced. Keep both lists identical.
 
-Bu iki listeyi birbiriyle ayni tut. `allowedUsers.js` sadece arayuzde
-"erisimin yok" ekranini gostermek icin; gercek guvenlik `firestore.rules`
-dosyasinda. Biri olmadan digeri tek basina yeterli degil.
+Step 4, deploy Firestore security rules. Run npm install -g firebase-tools, then firebase login, then firebase init firestore, then firebase deploy --only firestore:rules.
 
-### 4. Firestore kurallarini yayinla
+Step 5, run locally. Run npm install, then npm run dev.
 
-Firebase CLI kurulu degilse:
-```bash
-npm install -g firebase-tools
-firebase login
-```
+Step 6, deploy to production. Run npm run build, then firebase init hosting, then firebase deploy --only hosting. This gives you a live URL at https://project-id.web.app.
 
-Proje klasorunde:
-```bash
-firebase init firestore   # var olan projeyi sec, firestore.rules dosyasini kullan
-firebase deploy --only firestore:rules
-```
+## Why two access-control layers?
 
-### 5. Yerelde calistir
-
-```bash
-npm install
-npm run dev
-```
-
-Tarayicida acilan adrese git, Google ile giris yap. Eger e-postan
-allowlist'te yoksa "Erisim yok" ekranini gorursun — bu normal, listeye
-eklenince calisir.
-
-### 6. Yayina al (herkesin kullanabilecegi gercek bir adres)
-
-En kolay yol Firebase Hosting:
-```bash
-npm run build
-firebase init hosting     # public directory: dist, single-page app: yes
-firebase deploy --only hosting
-```
-
-Bu sana `https://<proje-adi>.web.app` seklinde gercek bir adres verir —
-Emar AVM'deki magazada tablet/telefon tarayicisindan bu adrese girip
-kullanabilirsiniz.
-
-Alternatif olarak Vercel de kullanilabilir (`vercel` CLI ile, ortam
-degiskenlerini Vercel proje ayarlarina ekleyerek).
-
-### 7. GitHub'a ekle
-
-```bash
-git init
-git add .
-git commit -m "Butik sira takip - ilk surum"
-git remote add origin <senin-repo-linkin>
-git push -u origin main
-```
-
-`.env` dosyasi `.gitignore` icinde oldugu icin Firebase anahtarlarin
-GitHub'a gitmez — bu normal ve dogru davranis. README'deki kurulum
-adimlari sayesinde baskasi da projeyi klonlayip kendi Firebase projesiyle
-calistirabilir; bu da portfolyo acisindan iyi bir izlenim birakir.
-
-## Teknik notlar
-
-- **Frontend**: React + Vite
-- **Kimlik dogrulama**: Firebase Authentication (Google Sign-In)
-- **Veritabani**: Firestore, gercek zamanli senkronizasyon icin `onSnapshot`
-- **Erisim kontrolu iki katmanli**:
-  - `src/AuthGate.jsx` — arayuzde "erisimin yok" ekranini gosterir (UX icin)
-  - `firestore.rules` — asil guvenlik, sunucu tarafinda zorunlu kilinir
-    (birisi tarayici konsolundan `allowedUsers.js` listesini degistirse
-    bile Firestore kurallarini asamaz)
+AuthGate.jsx only controls what the UI shows, it's there for a clean user experience, a proper you-dont-have-access screen instead of a broken app. The actual security boundary is firestore.rules, enforced by Firebase's servers on every read and write. Even if someone bypassed the client entirely, the database itself would still reject them.
