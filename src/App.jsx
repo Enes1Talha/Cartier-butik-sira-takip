@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { db, doc, getDoc, setDoc, onSnapshot } from "./firebase";
+import { db, doc, getDoc, setDoc, onSnapshot, runTransaction } from "./firebase";
 import { logout } from "./firebase";
 
 /* ------------------------------------------------------------------ */
@@ -173,28 +173,31 @@ export default function BoutiqueQueue({ user }) {
   };
 
   const push = useCallback(
-    async (next) => {
-      setSyncing(true);
-      try {
-        const snap = await getDoc(queueDocRef());
-        const o = snap.exists() ? snap.data() : { entries: [], clearedAt: 0 };
-        const cleared = Math.max(clearedRef.current, o.clearedAt || 0);
-        clearedRef.current = cleared;
-        const merged = mergeById(o.entries || [], next).filter(
-          (e) => e.createdAt > cleared
+          async (next) => {
+                    setSyncing(true);
+                    try {
+                                const merged = await runTransaction(db, async (tx) => {
+                                              const snap = await tx.get(queueDocRef());
+                                              const o = snap.exists() ? snap.data() : { entries: [], clearedAt: 0 };
+                                              const cleared = Math.max(clearedRef.current, o.clearedAt || 0);
+                                              clearedRef.current = cleared;
+                                              const m = mergeById(o.entries || [], next).filter(
+                                                              (e) => e.createdAt > cleared
+                                                                            );
+                                              tx.set(queueDocRef(), { entries: m, clearedAt: cleared });
+                                              return m;
+                                });
+                                setEntries(merged);
+                                setLastSync(Date.now());
+                                setProblem(null);
+                    } catch {
+                                setProblem("Kaydedilemedi. İnternete bağlan ve Yenile'ye bas.");
+                    }
+                    setSyncing(false);
+          },
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+          []
         );
-        await setDoc(queueDocRef(), { entries: merged, clearedAt: cleared });
-        setEntries(merged);
-        setLastSync(Date.now());
-        setProblem(null);
-      } catch {
-        setProblem("Kaydedilemedi. İnternete bağlan ve Yenile'ye bas.");
-      }
-      setSyncing(false);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
 
   const clearDay = useCallback(async () => {
     const t = Date.now();
